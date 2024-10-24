@@ -52,6 +52,12 @@ public class ARTrackedImg : MonoBehaviour
         {
             UpdateImage(trackedImage);  // 이미지에 대응하는 오브젝트의 위치 및 회전을 업데이트
         }
+
+        // 추적이 중지된 이미지 처리 (이미지가 보이지 않을 때)
+        foreach (ARTrackedImage trackedImage in eventArgs.removed)
+        {
+            DisableImage(trackedImage);  // 오브젝트 비활성화
+        }
     }
 
     // 추적된 이미지에 대응하는 오브젝트의 위치와 회전을 업데이트하고, 오브젝트를 활성화
@@ -62,5 +68,16 @@ public class ARTrackedImg : MonoBehaviour
         tObj.transform.position = trackedImage.transform.position;  // 이미지가 있는 위치에 오브젝트 위치를 맞춤
         tObj.transform.rotation = trackedImage.transform.rotation;  // 이미지의 회전에 맞춰 오브젝트 회전을 설정
         tObj.SetActive(true);  // 오브젝트를 활성화하여 씬에 표시
+    }
+
+    // 추적이 중지된 이미지에 대응하는 오브젝트를 비활성화
+    private void DisableImage(ARTrackedImage trackedImage)
+    {
+        string name = trackedImage.referenceImage.name;  // 추적된 이미지의 이름을 가져옴
+        if (_prefabDic.ContainsKey(name))
+        {
+            GameObject tObj = _prefabDic[name];  // 해당 이름에 매핑된 오브젝트를 딕셔너리에서 가져옴
+            tObj.SetActive(false);  // 오브젝트를 비활성화
+        }
     }
 }
