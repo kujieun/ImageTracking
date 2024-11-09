@@ -4,10 +4,14 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.XR;
 using UnityEngine.XR.ARFoundation;
+using System.Net;
+using System.Text;
+using System.IO;
+using UnityEngine.Networking;
+
 
 public class ARTrackedImg : MonoBehaviour
 {
-
     // ARTrackedImageManager를 통해 AR 이미지 추적 관리
     public ARTrackedImageManager trackedImageManager;
 
@@ -15,6 +19,8 @@ public class ARTrackedImg : MonoBehaviour
     public List<GameObject> _objectList = new List<GameObject>();
 
     public TextMeshProUGUI objectDescriptionText; // 오브젝트 설명을 표시할 UI 텍스트
+
+    public NaverTTS tts; // NaverTTS 스크립트를 참조
 
     // 이미지 이름을 키로, 해당 이미지를 추적할 때 표시할 3D 오브젝트를 값으로 가지는 딕셔너리
     private Dictionary<string, GameObject> _prefabDic = new Dictionary<string, GameObject>();
@@ -32,6 +38,14 @@ public class ARTrackedImg : MonoBehaviour
         {"hyeopdo", "협도는 중국에서 도입된 칼류의 도검무예이다. 장검처럼 눈썹 모양을 하고 도를 이용하여 찍어 베는 형태의 감법을 사용하고 있다."},
         {"gwonbeop", "권법은 손과 발을 이용하여 상대방을 공격하거나 방어하는 맨손 무예이다. 무예를 배우는 자가 가장 먼저 익히는 기초적인 무예로서 주먹으로 치는 형태의 격법을 사용하고 있다."},
     };
+
+    private float initialDistance;
+    private float previousTouchDistance = 0; // 이전 손가락 거리
+    private Vector3 initialScale;
+    private Quaternion initialRotation; // 초기 회전값 저장
+    public GameObject ObjectPool; // 오브젝트를 담고 있는 부모 오브젝트
+    private float accumulatedRotation = 0f;
+    private Vector2 initialTouchPosition;
 
     void Awake()
     {
@@ -54,6 +68,74 @@ public class ARTrackedImg : MonoBehaviour
         // 컴포넌트가 비활성화되면 이벤트 핸들러 해제
         trackedImageManager.trackedImagesChanged -= ImageChanged;
     }
+
+    void Update()
+    {
+        /*
+        if (Input.touchCount == 2)
+        {
+            // 두 손가락 터치를 가져옵니다.
+            Touch touch1 = Input.GetTouch(0);
+            Touch touch2 = Input.GetTouch(1);
+
+            // 터치 시작 시 초기 거리와 ObjectPool의 초기 크기 저장
+            if (touch1.phase == TouchPhase.Began || touch2.phase == TouchPhase.Began)
+            {
+                previousTouchDistance = Vector2.Distance(touch1.position, touch2.position);
+                initialScale = ObjectPool.transform.localScale;
+            }
+            // 터치 이동 시 ObjectPool의 스케일 조정
+            else if (touch1.phase == TouchPhase.Moved || touch2.phase == TouchPhase.Moved)
+            {
+                float currentTouchDistance = Vector2.Distance(touch1.position, touch2.position);
+                if (Mathf.Approximately(previousTouchDistance, 0)) return;
+
+                // 현재 거리와 초기 거리의 비율에 따라 스케일 팩터 계산
+                float scaleFactor = currentTouchDistance / previousTouchDistance;
+                ObjectPool.transform.localScale = initialScale * scaleFactor;  // ObjectPool의 스케일 변경
+            }
+        }
+        */
+
+        // 회전값 누적을 위한 변수 추가
+
+
+        // 누적된 회전값이 초기화되지 않도록 `initialTouchPosition`을 한 번만 설정하도록 수정
+        if (Input.touchCount == 1)
+        {
+            Touch touch = Input.GetTouch(0);
+
+            // 터치를 시작할 때마다 초기 터치 위치를 설정
+            if (touch.phase == TouchPhase.Began)
+            {
+                initialTouchPosition = touch.position;
+            }
+
+            // 터치 이동 시 회전 비율 적용
+            if (touch.phase == TouchPhase.Moved)
+            {
+                // 터치 위치의 변화를 기준으로 회전 비율 계산
+                float deltaX = touch.position.x - initialTouchPosition.x;
+                float screenWidth = Screen.width;
+
+                // 화면의 넓이를 기준으로 이동 비율을 회전으로 변환
+                float rotationAmount = (deltaX / screenWidth) * 360f;
+
+                // 누적 회전 갱신
+                accumulatedRotation += rotationAmount;
+
+                // 갱신된 회전값 적용
+                ObjectPool.transform.rotation = Quaternion.Euler(0, accumulatedRotation, 0);
+
+                // 초기 터치 위치를 현재 터치 위치로 업데이트하여 회전이 계속 누적되도록 설정
+                initialTouchPosition = touch.position;
+            }
+        }
+
+
+
+    }
+
 
     // 이미지가 새로 인식되었거나 업데이트된 경우에 호출됨
     private void ImageChanged(ARTrackedImagesChangedEventArgs eventArgs)
@@ -83,14 +165,17 @@ public class ARTrackedImg : MonoBehaviour
         string name = trackedImage.referenceImage.name;  // 추적된 이미지의 이름을 가져옴
         GameObject tObj = _prefabDic[name];  // 해당 이름에 매핑된 오브젝트를 딕셔너리에서 가져옴
         tObj.transform.position = trackedImage.transform.position;  // 이미지가 있는 위치에 오브젝트 위치를 맞춤
-        tObj.transform.rotation = trackedImage.transform.rotation;  // 이미지의 회전에 맞춰 오브젝트 회전을 설정
+        tObj.transform.rotation = trackedImage.transform.rotation * Quaternion.Euler(0, 180, 0);
+        // 이미지의 회전에 맞춰 오브젝트 회전을 설정
         tObj.SetActive(true);  // 오브젝트를 활성화하여 씬에 표시
 
         // 오브젝트에 대한 설명을 UI에 표시
         if (_objectDescriptions.ContainsKey(name))
         {
-            objectDescriptionText.text = _objectDescriptions[name]; // 설명 텍스트 업데이트
-            objectDescriptionText.gameObject.SetActive(true); // 설명 UI 표시
+            string description = _objectDescriptions[name];
+            objectDescriptionText.text = description;
+            objectDescriptionText.gameObject.SetActive(true);
+            tts.text = description; // 설명 텍스트를 TTS에 전달
         }
     }
 
@@ -101,8 +186,10 @@ public class ARTrackedImg : MonoBehaviour
         if (_prefabDic.ContainsKey(name))
         {
             GameObject tObj = _prefabDic[name];  // 해당 이름에 매핑된 오브젝트를 딕셔너리에서 가져옴
-            tObj.SetActive(false);  // 오브젝트를 비활성화
-            objectDescriptionText.gameObject.SetActive(false);  // UI 텍스트도 비활성화
+            tObj.SetActive(false);  // 오브젝트를 비활성화하여 씬에서 제거
         }
+
+        // 오브젝트 설명 UI 숨기기
+        objectDescriptionText.gameObject.SetActive(false);
     }
 }
